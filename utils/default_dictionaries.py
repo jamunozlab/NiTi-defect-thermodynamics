@@ -106,5 +106,7 @@ lammps = {
     "atom_type_to_reduce": 1,
     "reduction_percentage": 0.0,
     "defect_percentage": 0.0,
-    "random_seed": 12345
+    "random_seed": 12345,
+    "atom_type_to_remove": 1,   # 1 = Ni, 2 = Ti
+    "vacancy_percentage": 0.0   # Percentage of selected species
 }
