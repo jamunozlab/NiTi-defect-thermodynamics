@@ -100,7 +100,14 @@ genetic_phonon = {
 }
 
 lammps = {
+    "dimension": 3,
+    "boundary": "p p p",
+    "atom_style": "metal",
+    "timestep": 0.005,
+    "ntimesteps": 2000,
     "temperature": 200,
+    "logstep": 500,
+    "tdamp": 0.5,
     "system_size": 20,
     "lattice_parameter": 3.00,
     "atom_type_to_reduce": 1,

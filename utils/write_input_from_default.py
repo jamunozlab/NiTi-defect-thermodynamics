@@ -17,6 +17,9 @@ def generate_input_from_default(default, **kwargs):
 def generate_input_lines(param_dict):
 
     temperature = param_dict["temperature"]
+    ntimesteps = param_dict["ntimesteps"]
+    tdamp = param_dict["tdamp"]
+    logstep = param_dict["logstep"]
 
     input_text = f"""units         metal
 dimension     3
@@ -52,13 +55,13 @@ velocity all create {temperature} 12345 mom yes rot no
 
 reset_timestep 0
 
-fix 3 all nvt temp {temperature} {temperature} 0.5
+fix 3 all nvt temp {temperature} {temperature} {tdamp}
 
 # Setting thermo
-thermo 500
+thermo {logstep}
 
 # Run
-run 2000
+run {ntimesteps}
 
 # SIMULATION DONE
 print "All done"
@@ -245,9 +248,3 @@ def write_input_from_default(default, simulation_path, **kwargs):
         atom_types=atom_types,
         vacancy_indices=vacancy_indices,
     )
-
-#    if "a_val" in simulation_parameters_dictionary:
-#        write_bcc_poscar(
-#            simulation_path,
-#            simulation_parameters_dictionary["a_val"]
-#        )

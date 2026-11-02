@@ -2,8 +2,10 @@
 
 """
 Extracts AMReX simulation data and puts it in ml-friendly np array files
+Extracts LAMMPS thermo log simulation data and puts it in ml-friendly np array files
 @Author: Jorge Munoz
 @Date: June 30, 2023; mods July 11th, July14th; additions July 17th; minor additions August 8th
+@Date: Added LAMMPS support on November 2, 2026
 """
 
 import numpy as np

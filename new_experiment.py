@@ -42,6 +42,8 @@ if __name__ == "__main__":
     #### SCRIPT SHOULD BE BELOW ####
 
     experiment_description = (
+        "Logstep is 200\n"
+        "tdamp is 0.01\n"
         "NiTi LAMMPS vacancy concentration sweep on macOS\n"
         "Vacancy species: Ni and Ti\n"
         "Nominal vacancy concentrations: 1, 2, 3 percent\n"
@@ -50,7 +52,7 @@ if __name__ == "__main__":
         "MPI processes per simulation: 4\n"
     )
 
-    vacancy_percentages = [1.0, 2.0, 3.0]
+    vacancy_percentages = [1.0, 2.0]
     atom_types_to_remove = [1, 2]
 
     for atom_type_to_remove in atom_types_to_remove:
@@ -61,7 +63,9 @@ if __name__ == "__main__":
                 "reduction_percentage": 0.0,
                 "defect_percentage": 0.0,
                 "atom_type_to_remove": atom_type_to_remove,
-                "vacancy_percentage": vacancy_percentage
+                "vacancy_percentage": vacancy_percentage,
+                "ntimesteps": 2000,
+                "logstep": 200
             }
 
             sbatch_options_dict = {
