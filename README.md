@@ -1,253 +1,307 @@
 # NiTi Defect Thermodynamics
 
-This repository contains a lightweight workflow for generating, running, extracting, and analyzing molecular dynamics (MD) simulations of B2 NiTi using LAMMPS and a modified embedded-atom method (MEAM) potential. It uses **UTEP (Utilities To Execute Pipelines)** to organize parameter sweeps into reproducible simulation directories and experiment manifests.
+This repository implements a lightweight, reproducible workflow for generating, running, extracting, and analyzing molecular-dynamics (MD) simulations of B2 NiTi using LAMMPS and a modified embedded-atom method (MEAM) potential. **UTEP (Utilities To Execute Pipelines)** organizes parameter sweeps into simulation directories and experiment manifests.
 
-The workflow has four layers:
+The workflow consists of five stages:
 
-1. **Experiment generation:** create B2 NiTi structures and LAMMPS input files for a parameter sweep.
-2. **Execution:** run the simulations using LAMMPS and MPI.
-3. **ETL (extract, transform, load):** convert LAMMPS thermodynamic logs to compressed NumPy archives.
-4. **Analysis:** load all simulation archives for an experiment into a pandas DataFrame and visualize thermodynamic time series.
+1. **Generate:** define parameter sweeps and generate structures and LAMMPS input files.
+2. **Execute:** run LAMMPS simulations locally with MPI.
+3. **Extract (ETL):** convert thermodynamic output in `log.lammps` to `thermo.npz`.
+4. **Fit:** use `models/bm_eos.py` to fit a third-order Birch–Murnaghan equation of state to energy–volume data.
+5. **Build a DataFrame:** run `build_dataframe.py` on one or more experiments and save their EOS summaries as a pandas pickle.
 
 ## Requirements
 
-- Python 3 with NumPy
-- pandas and Matplotlib for the analysis notebook
-- Jupyter Notebook or JupyterLab to run the analysis notebook
+- Python 3, NumPy, pandas, SciPy, and Matplotlib
 - LAMMPS compiled with MEAM support
-- An MPI implementation (such as Open MPI) for the current local launcher
-- A Unix-like shell (the current workflow has been tested on macOS)
+- MPI implementation (for example, Open MPI)
+- A Unix-like shell (tested on macOS)
+- Jupyter Notebook or JupyterLab, **optional**, for interactive analysis
+
+A working Conda environment can be activated with:
+
+```bash
+conda env list
+conda activate moga
+python -c "import numpy, pandas, scipy, matplotlib; print('Python dependencies available')"
+```
+
+The `moga` environment is an example of an existing environment that has been used successfully; it is **not** a required environment name. To install the Python dependencies into an appropriate Conda environment:
+
+```bash
+conda install numpy pandas scipy matplotlib
+```
 
 ## Repository layout
 
 ```text
 NiTi-defect-thermodynamics/
-├── new_experiment.py                    # Define and launch parameter sweeps
-├── etl_experiment_lammps.py             # Extract data for a complete experiment
-├── UTEP_LAMMPS_experiment_analysis.ipynb # DataFrame analysis and plotting
+├── new_experiment.py                     # Define and run parameter sweeps
+├── etl_experiment_lammps.py              # Convert LAMMPS logs to thermo.npz
+├── build_dataframe.py                    # Build experiment-level EOS DataFrame
+├── UTEP_LAMMPS_experiment_analysis.ipynb # Interactive analysis notebook
+├── models/
+│   └── bm_eos.py                         # LammpsExperiment and BM EOS fit
+├── dataframes/                           # Generated pandas pickle files
 ├── utils/
-│   ├── config.py                        # Local paths, executable, linked files
-│   ├── default_dictionaries.py          # Default simulation parameters
+│   ├── config.py                         # Machine-specific paths and executable
+│   ├── default_dictionaries.py           # Default simulation parameters
 │   ├── new_simulation_from_default.py
-│   ├── write_input_from_default.py      # LAMMPS input and B2 structure generation
+│   ├── write_input_from_default.py       # LAMMPS input and B2 structure
 │   ├── write_run_sbatch_from_default.py
-│   └── lammps_etl_utils.py              # Extract LAMMPS thermodynamic time series
+│   └── lammps_etl_utils.py               # Thermodynamic data extraction
 ├── executables/
-│   ├── NiTi.library.meam                # MEAM library parameters
-│   ├── NiTi.meam                        # MEAM alloy parameters
-│   └── lmp_mpi                          # Local symbolic link, NOT a bundled binary
-├── simulations/
-│   └── .gitkeep
-└── experiments/
-    └── .gitkeep
+│   ├── NiTi.library.meam
+│   ├── NiTi.meam
+│   └── lmp_mpi                            # Local executable symlink
+├── simulations/                          # Generated simulation directories
+└── experiments/                          # Experiment manifests
 ```
 
-## LAMMPS executable: important symlink setup
+## Configure LAMMPS and UTEP
 
-The `executables/lmp_mpi` entry is a **symbolic link**, not a copy of LAMMPS. Git records the link target; it **does not upload the LAMMPS binary**. In the original macOS setup, the link points to `/opt/homebrew/bin/lmp_mpi`. That path may not exist on another machine, so **recreate the link locally after cloning**.
-
-First, install LAMMPS with MEAM support and an MPI implementation. Check where the executable is installed:
+The `executables/lmp_mpi` entry is a **symbolic link**, not a bundled executable. In the original macOS setup it points to `/opt/homebrew/bin/lmp_mpi`. After cloning on another machine, install LAMMPS with MEAM support and recreate the link as necessary:
 
 ```bash
 command -v lmp_mpi
-```
-
-From the repository root, replace the tracked link with one pointing to your installed executable:
-
-```bash
 rm executables/lmp_mpi
 ln -s "$(command -v lmp_mpi)" executables/lmp_mpi
-```
-
-Verify the link and executable:
-
-```bash
-ls -l executables/lmp_mpi
 ./executables/lmp_mpi -h
 ```
 
-The LAMMPS help output should list MEAM support. For an MPI smoke test (adjust the process count to your machine):
+Check that the help output includes MEAM. Replacing a tracked symlink may appear as a local Git modification; avoid committing a machine-specific path unintentionally. Alternatively, configure the executable location in `utils/config.py`.
 
-```bash
-mpirun -np 4 ./executables/lmp_mpi -h > mpi_test.log 2>&1
-```
-
-**Note:** Replacing the tracked symlink changes your local Git working tree. This is expected for a machine-specific path; do not commit that local symlink change unless you intentionally want to update the repository's default link. Alternatively, configure `executable` and `executables_path` in `utils/config.py` to reference a suitable local executable directory.
-
-## Configure the workflow
-
-Edit `utils/config.py` to set the local paths for `simulations/`, `experiments/`, and `executables/`. The current configuration uses absolute paths, so update them after cloning. Ensure that the executable name matches the file or symlink in `executables/` and that `other_files` includes the two MEAM parameter files:
+Edit `utils/config.py` to set local paths to the `simulations/`, `experiments/`, and `executables/` directories. The MEAM files must be available to each simulation:
 
 ```python
 other_files = ["NiTi.library.meam", "NiTi.meam"]
 ```
 
-Do **not** include `atoms_positions.data` in `other_files`: it is generated separately for each simulation.
+Do not add `atoms_positions.data` to `other_files`: it is generated for each simulation.
 
-Simulation defaults are defined in the `lammps` dictionary in `utils/default_dictionaries.py`. The current options include:
+Simulation defaults are defined in `utils/default_dictionaries.py`:
 
 | Parameter | Meaning |
 | --- | --- |
-| `temperature` | MD target temperature (K) |
-| `timestep` | MD timestep (ps with LAMMPS `metal` units) |
-| `ntimesteps` | Number of MD integration steps |
-| `logstep` | Interval between thermodynamic log records |
+| `temperature` | Target temperature (K) |
+| `timestep` | Integration timestep (ps in LAMMPS `metal` units) |
+| `ntimesteps` | Number of integration steps |
+| `logstep` | Thermodynamic output interval |
 | `tdamp` | Thermostat damping time (ps) |
-| `system_size` | Number of B2 conventional cells along each box direction |
+| `system_size` | Number of B2 cubic cells per box edge |
 | `lattice_parameter` | Cubic B2 lattice parameter (Å) |
 | `atom_type_to_reduce` | Species converted to the other species (1 = Ni, 2 = Ti) |
-| `reduction_percentage` | Fraction of all sites converted (e.g., `0.01` = 1% of sites) |
-| `defect_percentage` | Nominal antisite percentage (e.g., `1.0` = 1%) |
+| `reduction_percentage` | Fraction of all sites converted |
+| `defect_percentage` | Nominal antisite percentage |
 | `atom_type_to_remove` | Species selected for vacancies (1 = Ni, 2 = Ti) |
-| `vacancy_percentage` | Percentage of the selected species removed (e.g., `1.0` = 1%) |
-| `random_seed` | Seed for reproducible random selections |
+| `vacancy_percentage` | Percentage of the selected species removed |
+| `random_seed` | Random seed for reproducibility |
 
-The B2 structure generator creates two sites per cubic unit cell, with ideal sublattice positions `(0, 0, 0)` and `(1/2, 1/2, 1/2)`. It applies composition changes, antisite assignments, and vacancy removal in that order, then writes `atoms_positions.data` in each simulation directory.
+The B2 structure has two sites per cubic cell at `(0, 0, 0)` and `(1/2, 1/2, 1/2)`. Structure generation applies composition changes, antisite assignments, and vacancy removal in that order.
 
-## 1. Define and run an experiment
+## 1. Generate and run an experiment
 
-Edit the section between `#### SCRIPT SHOULD BE BELOW ####` and `#### SCRIPT SHOULD BE ABOVE ####` in `new_experiment.py`. For example, to sweep temperature and lattice parameter, use nested loops and pass the overrides to `new_simulation_from_default()`:
+Edit the section between `#### SCRIPT SHOULD BE BELOW ####` and `#### SCRIPT SHOULD BE ABOVE ####` in `new_experiment.py`. For example:
 
 ```python
 experiment_description = (
-    "NiTi temperature and lattice-parameter sweep\n"
-    "Temperatures: 200, 300, 400 K\n"
-    "Lattice parameters: 2.95, 3.00, 3.05 Angstrom\n"
+    "Pristine B2 NiTi lattice-parameter sweep\n"
+    "Temperature: 400 K\n"
+    "Lattice parameters: 2.81 to 3.20 Angstrom\n"
 )
 
-for lattice_parameter in [2.95, 3.00, 3.05]:
-    for temperature in [200, 300, 400]:
-        sim_params_dict = {
-            "temperature": temperature,
-            "lattice_parameter": lattice_parameter,
-        }
-        sbatch_options_dict = {"nproc": 4}
+lattice_parameters = [round(2.81 + 0.01 * i, 2) for i in range(40)]
 
-        simulation_id = new_simulation_from_default(
-            default_input_dictionary,
-            simulations_path,
-            executables_path,
-            executable,
-            sim_params_dict,
-            sbatch_options_dict,
-            other_files=other_files,
-            submit_job=submit_job,
-        )
-        simulation_ids.append(simulation_id)
+for lattice_parameter in lattice_parameters:
+    sim_params_dict = {
+        "temperature": 400,
+        "lattice_parameter": lattice_parameter,
+    }
+    sbatch_options_dict = {"nproc": 4}
+
+    simulation_id = new_simulation_from_default(
+        default_input_dictionary,
+        simulations_path,
+        executables_path,
+        executable,
+        sim_params_dict,
+        sbatch_options_dict,
+        other_files=other_files,
+        submit_job=submit_job,
+    )
+    simulation_ids.append(simulation_id)
 
 experiment_id = find_next_available_file("experiment", experiments_path)
 ```
 
-From the repository root, create simulation directories **without running LAMMPS**:
+From the repository root, generate simulation directories without executing LAMMPS:
 
 ```bash
 python new_experiment.py lammps --test
 ```
 
-To create and execute a fresh set of simulations:
+To generate **new** directories and execute the simulations:
 
 ```bash
 python new_experiment.py lammps
 ```
 
-The second command creates **new** simulation directories; it does not resume the test directories. The current macOS runner launches simulations sequentially, with each simulation using the configured number of MPI processes.
+The current local launcher runs simulations sequentially; each simulation can use multiple MPI processes. The `experiments/experimentXXXXXX` manifest lists the associated simulation IDs. Each simulation directory contains `inputc`, `atoms_positions.data`, `runc.sh`, linked potential files, and (after execution) LAMMPS outputs.
 
-Each simulation directory contains its generated LAMMPS input (`inputc`), structure (`atoms_positions.data`), run script (`runc.sh`), linked MEAM files, and output files after execution. The `experiments/` directory contains a manifest listing the simulation IDs belonging to each sweep.
+## 2. Extract thermodynamic data (ETL)
 
-## 2. Extract LAMMPS thermodynamic data (ETL)
-
-After running an experiment, use `etl_experiment_lammps.py` from the repository root. For example:
+After running an experiment:
 
 ```bash
-python etl_experiment_lammps.py experiment000009
+python etl_experiment_lammps.py experiment000011
 ```
 
-For detailed processing messages:
+For additional messages:
 
 ```bash
-python etl_experiment_lammps.py experiment000009 --verbose
+python etl_experiment_lammps.py experiment000011 --verbose
 ```
 
-The experiment-level script reads `experiments/experiment000009`, identifies the associated simulation directories, and calls `etl()` from `utils/lammps_etl_utils.py` for each simulation. It reads the thermodynamic table associated with the **last LAMMPS `run` command** in each `log.lammps` file, rather than the preceding minimization table.
-
-Each successfully processed simulation receives **one** compressed archive:
+The ETL code reads the thermodynamic table associated with the **last LAMMPS `run`**, not the preceding minimization, and writes:
 
 ```text
 simulations/simulationXXXXXX/thermo.npz
 ```
 
-The archive contains four NumPy arrays, each with one value per recorded timestep:
+Each archive contains:
 
-| Array key | Quantity | Units (`metal`) |
+| Array | Quantity | Units |
 | --- | --- | --- |
-| `Step` | MD timestep index | dimensionless |
+| `Step` | Timestep index | dimensionless |
 | `Temp` | Temperature | K |
-| `TotEng` | Total energy | eV |
+| `TotEng` | Total energy of the simulation cell | eV |
 | `Press` | Pressure | bar |
 
-The ETL script identifies columns from the log header, so their positions in the LAMMPS thermo table need not be fixed. If a simulation's log is missing or has no suitable thermodynamic table, the experiment-level driver prints a warning and continues with the remaining simulations. Re-running ETL overwrites an existing `thermo.npz` for a successfully processed simulation.
+The ETL driver skips missing or invalid logs with a warning. Re-running ETL overwrites existing `thermo.npz` files for successfully processed simulations. Use `python etl_experiment_lammps.py --help` for additional options.
 
-**Command-line options:**
+## 3. Fit a Birch–Murnaghan EOS
+
+`models/bm_eos.py` provides the importable `LammpsExperiment` class. It loads the `thermo.npz` archives referenced by an experiment manifest, and fits a third-order Birch–Murnaghan equation to the average total energy per atom versus volume per atom.
+
+For example, in Python or a Jupyter notebook:
+
+```python
+from models.bm_eos import LammpsExperiment
+
+experiment = LammpsExperiment("experiment000011", repo_root=".")
+fit = experiment.fit_birch_murnaghan(discard_fraction=0.5)
+print(fit["a0_A"], fit["B0_GPa"], fit["B0_prime"])
+experiment.plot_birch_murnaghan()
+```
+
+The default `discard_fraction=0.5` excludes the first half of each simulation's thermodynamic samples before averaging. The fit returns `E0_eV_per_atom`, `V0_A3_per_atom`, `a0_A`, `B0_eV_per_A3`, `B0_GPa`, and `B0_prime`, as well as fit parameters and covariance.
+
+**Current limitations:** The EOS fitting method assumes cubic, pristine B2 supercells with exactly `2 * system_size**3` atoms. It is not yet generalized to vacancy-containing structures. The fit is to the finite-temperature **mean internal energy**, not the Helmholtz free energy; its fitted minimum and curvature should be interpreted accordingly.
+
+## 4. Build and save an experiment-level DataFrame
+
+`build_dataframe.py` runs from the **Terminal**; VS Code and Jupyter are not required. It accepts one or more experiment manifest names, runs the BM fit for each experiment, and saves **one row per experiment**.
+
+For one experiment:
 
 ```bash
-python etl_experiment_lammps.py --help
+python build_dataframe.py --experiment experiment000011
 ```
 
-`--repo_root` specifies a different repository location; `--input_filename` retains the compatible ETL argument (currently unused by the log parser); and `--output_filename` specifies the **input LAMMPS log filename**, defaulting to `log.lammps`. The compressed output filename remains `thermo.npz`.
-
-You can also inspect one archive directly:
-
-```python
-import numpy as np
-
-with np.load("simulations/simulationXXXXXX/thermo.npz") as data:
-    for key in data.files:
-        print(key, data[key].shape)
-```
-
-## 3. Analyze an experiment in Jupyter
-
-Open `UTEP_LAMMPS_experiment_analysis.ipynb` with Jupyter Notebook or JupyterLab. Run it with the working directory set to the repository root, or change `REPO_ROOT` to an absolute path.
-
-The notebook defines a lightweight class, `LammpsExperiment`, that reads the experiment manifest, loads each simulation's `thermo.npz`, and combines the time series into a single pandas DataFrame. Each row represents one recorded timestep in one simulation, with columns:
+Default output:
 
 ```text
-simulation_id    Step    Temp    TotEng    Press
+dataframes/dataframe000011.pkl
 ```
 
-To load an experiment:
+For several experiments:
 
-```python
-from pathlib import Path
-
-experiment = LammpsExperiment(
-    "experiment000009",
-    repo_root=Path.cwd(),
-)
-
-print(experiment.df.head())
+```bash
+python build_dataframe.py --experiment experiment000011 experiment000010
 ```
 
-To plot temperature, total energy, or pressure against timestep for **all** simulations in the experiment:
+Default output:
+
+```text
+dataframes/bm_experiments.pkl
+```
+
+Specify a custom output filename or a different initial fraction to discard:
+
+```bash
+python build_dataframe.py \
+    --experiment experiment000011 experiment000010 \
+    --output_filename bm_selected.pkl \
+    --discard_fraction 0.5
+```
+
+The DataFrame includes:
+
+| Column | Description |
+| --- | --- |
+| `experiment` | Experiment manifest name |
+| `n_simulations`, `simulation_ids` | Number and IDs of simulations in the manifest |
+| `temperature_K` | Target temperature parsed from `inputc`, if consistent across simulations |
+| `x_Ni` | Ni atomic fraction calculated from the structure files, if consistent |
+| `defect_type` | Currently `unknown` |
+| `defect_concentration_percent` | Currently missing (`NaN`) |
+| `E0_eV_per_atom`, `V0_A3_per_atom`, `a0_A` | Fitted EOS parameters |
+| `B0_eV_per_A3`, `B0_GPa`, `B0_prime` | Fitted EOS modulus and pressure derivative |
+| `discard_fraction` | Fraction of initial samples discarded |
+| `fit_status`, `fit_error` | Fit success/failure and diagnostic message |
+
+If a fit fails, the builder records `fit_status="failed"` and an error message instead of silently dropping the experiment. The builder does **not** rerun LAMMPS or perform ETL: `thermo.npz` files must already exist.
+
+**Defect metadata is a work in progress.** Composition can be calculated from atom types in `atoms_positions.data`, but composition alone does not identify antisites or the original nominal defect percentage. The current script therefore leaves `defect_type` and `defect_concentration_percent` unspecified rather than guessing. A future revision will preserve these parameters explicitly when simulations are generated.
+
+### Read the DataFrame in a notebook
 
 ```python
+import pandas as pd
+
+df = pd.read_pickle("dataframes/bm_experiments.pkl")
+print(df[["experiment", "temperature_K", "x_Ni", "a0_A", "B0_GPa", "fit_status"]])
+```
+
+The `.pkl` format preserves pandas data types, including lists of simulation IDs. Only load pickle files from trusted sources.
+
+## 5. Inspect thermodynamic time series
+
+The `LammpsExperiment` class also provides time-series plotting:
+
+```python
+from models.bm_eos import LammpsExperiment
+
+experiment = LammpsExperiment("experiment000011", repo_root=".")
 experiment.plot("Temp")
 experiment.plot("TotEng")
 experiment.plot("Press")
 ```
 
-To plot only a selected simulation (replace the identifier with one listed in your experiment manifest):
+`plot()` accepts `simulation_ids` (a string or list) and an existing Matplotlib `ax`. The repository also contains `UTEP_LAMMPS_experiment_analysis.ipynb` for interactive exploration.
 
-```python
-experiment.plot("Temp", simulation_ids="simulationXXXXXX")
+## Troubleshooting
+
+If Python reports `ModuleNotFoundError: No module named 'pandas'`, activate a Conda environment containing the dependencies or install them there:
+
+```bash
+conda env list
+conda activate moga
+python -c "import pandas, scipy, numpy, matplotlib"
 ```
 
-The `plot()` method also accepts a list of simulation IDs or an existing Matplotlib `ax`. The notebook skips missing or inconsistent archives with a warning; it raises an error if no valid archives are available.
+To check syntax **without running the script**:
 
-**Note:** `LammpsExperiment` is defined in the notebook, not in an independently importable Python module. Execute the class-definition cell before using the examples above.
+```bash
+python -m py_compile build_dataframe.py
+```
+
+`py_compile` catches syntax errors, but does not execute imports or detect runtime errors. For available command-line arguments:
+
+```bash
+python build_dataframe.py --help
+```
 
 ## Git and generated data
 
-The repository tracks `.gitkeep` placeholders so `simulations/` and `experiments/` exist after cloning. The `.gitignore` rules exclude generated contents of those directories while retaining the placeholders. The `executables/` directory and MEAM parameter files are tracked.
-
-Simulation outputs, experiment manifests, and generated `thermo.npz` archives are local data and are not tracked under the current `.gitignore` rules. Local MPI test logs should generally not be committed; optionally add `mpi_test.log` to `.gitignore`.
+Simulation directories, experiment manifests, and thermodynamic archives are generated data. The repository uses `.gitignore` rules to exclude generated simulation and experiment contents while retaining `.gitkeep` placeholders. The `dataframes/` directory holds generated pickle outputs; check `git status` and `.gitignore` before committing any generated data. MEAM potential files are tracked, but the LAMMPS executable itself is not bundled.
