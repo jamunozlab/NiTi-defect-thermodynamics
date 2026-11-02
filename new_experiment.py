@@ -42,48 +42,39 @@ if __name__ == "__main__":
     #### SCRIPT SHOULD BE BELOW ####
 
     experiment_description = (
-        "Logstep is 200\n"
-        "tdamp is 0.01\n"
-        "NiTi LAMMPS vacancy concentration sweep on macOS\n"
-        "Vacancy species: Ni and Ti\n"
-        "Nominal vacancy concentrations: 1, 2, 3 percent\n"
-        "Initial structure: equiatomic B2 NiTi\n"
-        "Temperature and lattice parameter: dictionary defaults\n"
+        "NiTi LAMMPS lattice parameter sweep on macOS\n"
+        "Initial structure: pristine equiatomic B2 NiTi\n"
+        "Temperature: 200 K\n"
+        "Lattice parameters: 2.81 to 3.20 Angstrom, step 0.01 Angstrom\n"
+        "All other simulation parameters: dictionary defaults\n"
         "MPI processes per simulation: 4\n"
     )
 
-    vacancy_percentages = [1.0, 2.0]
-    atom_types_to_remove = [1, 2]
+    lattice_parameters = [round(2.81 + 0.01 * i, 2) for i in range(40)]
 
-    for atom_type_to_remove in atom_types_to_remove:
-        for vacancy_percentage in vacancy_percentages:
+    for lattice_parameter in lattice_parameters:
 
-            sim_params_dict = {
-                "atom_type_to_reduce": 1,
-                "reduction_percentage": 0.0,
-                "defect_percentage": 0.0,
-                "atom_type_to_remove": atom_type_to_remove,
-                "vacancy_percentage": vacancy_percentage,
-                "ntimesteps": 2000,
-                "logstep": 200
-            }
+        sim_params_dict = {
+            "temperature": 200,
+            "lattice_parameter": lattice_parameter
+        }
 
-            sbatch_options_dict = {
-                "nproc": 4
-            }
+        sbatch_options_dict = {
+            "nproc": 4
+        }
 
-            simulation_id = new_simulation_from_default(
-                default_input_dictionary,
-                simulations_path,
-                executables_path,
-                executable,
-                sim_params_dict,
-                sbatch_options_dict,
-                other_files=other_files,
-                submit_job=submit_job
-            )
+        simulation_id = new_simulation_from_default(
+            default_input_dictionary,
+            simulations_path,
+            executables_path,
+            executable,
+            sim_params_dict,
+            sbatch_options_dict,
+            other_files=other_files,
+            submit_job=submit_job
+        )
 
-            simulation_ids.append(simulation_id)
+        simulation_ids.append(simulation_id)
 
     experiment_id = find_next_available_file(
         'experiment', experiments_path
