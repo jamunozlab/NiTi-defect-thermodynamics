@@ -1,14 +1,18 @@
-
 # Generated simulation and experiment data
-simulations/
-experiments/
+simulations/*
+!simulations/.gitkeep
+
+experiments/*
+!experiments/.gitkeep
 
 # Python
 __pycache__/
 *.pyc
+
+# macOS
 .DS_Store
 
-# LAMMPS outputs
+# LAMMPS generated outputs
 dump.*
 log.lammps
 output.txt
