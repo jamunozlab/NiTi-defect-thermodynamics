@@ -1,0 +1,14 @@
+
+# Generated simulation and experiment data
+simulations/
+experiments/
+
+# Python
+__pycache__/
+*.pyc
+.DS_Store
+
+# LAMMPS outputs
+dump.*
+log.lammps
+output.txt
