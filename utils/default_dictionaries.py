@@ -105,7 +105,7 @@ lammps = {
     "atom_style": "metal",
     "timestep": 0.005,
     "ntimesteps": 2000,
-    "temperature": 200,
+    "temperature": 300,
     "logstep": 500,
     "tdamp": 0.5,
     "system_size": 20,
