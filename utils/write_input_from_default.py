@@ -3,7 +3,7 @@
 """
 Auxiliary functions to write input files
 """
-
+import json
 import numpy as np
 from pathlib import Path
 
@@ -13,6 +13,34 @@ def generate_input_from_default(default, **kwargs):
         simulation_parameters_dictionary[key] = value 
         
     return simulation_parameters_dictionary
+
+def save_simulation_parameters(simulation_path, parameters):
+    """
+    Save the complete simulation parameter dictionary as JSON.
+    """
+
+    output_path = Path(simulation_path) / "simulation_parameters.json"
+
+    def json_serializer(obj):
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        if isinstance(obj, np.generic):
+            return obj.item()
+        if isinstance(obj, Path):
+            return str(obj)
+        raise TypeError(
+            f"Object of type {type(obj).__name__} is not JSON serializable"
+        )
+
+    with open(output_path, "w") as f:
+        json.dump(
+            parameters,
+            f,
+            indent=4,
+            default=json_serializer,
+        )
+
+    return output_path
 
 def generate_input_lines(param_dict):
 
@@ -247,4 +275,9 @@ def write_input_from_default(default, simulation_path, **kwargs):
         simulation_parameters_dictionary["lattice_parameter"],
         atom_types=atom_types,
         vacancy_indices=vacancy_indices,
+    )
+
+    save_simulation_parameters(
+        simulation_path,
+        simulation_parameters_dictionary,
     )
