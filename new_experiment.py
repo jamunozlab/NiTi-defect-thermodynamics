@@ -41,27 +41,57 @@ if __name__ == "__main__":
 
     #### SCRIPT SHOULD BE BELOW ####
 
+
+    # Ni vacancy-count sweep in initially equiatomic B2 NiTi.
+    # One simulation for each vacancy count: 0, 1, ..., 8.
+
+    system_size = 20
+    temperature = 300
+    lattice_parameter = 3.00
+
+    n_Ni_sites = system_size**3
+
     experiment_description = (
-        "NiTi LAMMPS lattice parameter sweep on macOS\n"
-        "Initial structure: pristine equiatomic B2 NiTi\n"
-        "Temperature: 200 K\n"
-        "Lattice parameters: 2.81 to 3.20 Angstrom, step 0.01 Angstrom\n"
-        "All other simulation parameters: dictionary defaults\n"
+        "NiTi LAMMPS Ni-sublattice vacancy-count sweep\n"
+        "Initial composition: equiatomic B2 NiTi (50% Ni, 50% Ti)\n"
+        f"Temperature: {temperature} K\n"
+        f"Lattice parameter: {lattice_parameter:.2f} Angstrom\n"
+        f"System size: {system_size} x {system_size} x {system_size}\n"
+        "Vacancy species: Ni (atom type 1)\n"
+        "Vacancy counts: 0 through 8 inclusive\n"
+        "No composition adjustment or antisite disorder\n"
         "MPI processes per simulation: 4\n"
     )
 
-    lattice_parameters = [round(2.81 + 0.01 * i, 2) for i in range(40)]
+    for n_vacancies in range(9):
 
-    for lattice_parameter in lattice_parameters:
+        if n_vacancies == 0:
+            vacancy_percentage = 0.0
+        else:
+            vacancy_percentage = (
+                100.0 * (n_vacancies + 0.5) / n_Ni_sites
+            )
 
         sim_params_dict = {
-            "temperature": 200,
-            "lattice_parameter": lattice_parameter
+            "temperature": temperature,
+            "lattice_parameter": lattice_parameter,
+            "system_size": system_size,
+            "atom_type_to_reduce": 1,
+            "reduction_percentage": 0.0,
+            "defect_percentage": 0.0,
+            "atom_type_to_remove": 1,
+            "vacancy_percentage": vacancy_percentage,
+            "random_seed": 12345,
         }
 
         sbatch_options_dict = {
-            "nproc": 4
+            "nproc": 4,
         }
+
+        print(
+            f"Creating simulation with {n_vacancies} Ni vacancies "
+            f"({vacancy_percentage:.6f}% of Ni sites)"
+        )
 
         simulation_id = new_simulation_from_default(
             default_input_dictionary,
@@ -71,14 +101,15 @@ if __name__ == "__main__":
             sim_params_dict,
             sbatch_options_dict,
             other_files=other_files,
-            submit_job=submit_job
+            submit_job=submit_job,
         )
 
         simulation_ids.append(simulation_id)
 
     experiment_id = find_next_available_file(
-        'experiment', experiments_path
+        "experiment", experiments_path
     )
+
 
     #### SCRIPT SHOULD BE ABOVE ####
 

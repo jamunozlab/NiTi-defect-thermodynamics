@@ -19,3 +19,6 @@ output.txt
 
 # Notebooks for now
 *.ipynb
+
+# Generated analysis results
+dataframes/*_vacancy_energies.csv

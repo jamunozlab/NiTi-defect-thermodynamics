@@ -104,7 +104,7 @@ lammps = {
     "boundary": "p p p",
     "atom_style": "metal",
     "timestep": 0.005,
-    "ntimesteps": 2000,
+    "ntimesteps": 20000,
     "temperature": 300,
     "logstep": 500,
     "tdamp": 0.5,
@@ -113,7 +113,7 @@ lammps = {
     "atom_type_to_reduce": 1,
     "reduction_percentage": 0.0,
     "defect_percentage": 0.0,
-    "random_seed": 12345,
+    "random_seed": 12347,
     "atom_type_to_remove": 1,   # 1 = Ni, 2 = Ti
     "vacancy_percentage": 0.0   # Percentage of selected species
 }
