@@ -16,3 +16,6 @@ __pycache__/
 dump.*
 log.lammps
 output.txt
+
+# Notebooks for now
+*.ipynb
